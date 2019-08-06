@@ -96,7 +96,7 @@ end
 loop do
 
     print "\e[1;1H\e[K\n" #jump to 1:1 and clear first line
-    print " Interface                               IN            OUT            SNR            CD\e[K\n" 
+    print " IP                     Interface            Channel         Type              IN            OUT            SNR            CD\e[K\n" 
 
     cols,rows = get_console_cols_rows
     #printheader
@@ -158,7 +158,7 @@ loop do
             print " #{ ip.ljust(22)} "
             print "#{ interface.ljust(20)} "
             print "#{ (channel ? channel[1] : "-").ljust(15)} "
-            print "#{ type.ljust(30)} "
+            print "#{ type.ljust(10)} "
             print "#{ (in_level ? in_level[1] : "-").rjust(10)} dBm "
             print "#{ (out_level ? out_level[1] : "-").rjust(10)} dBm "
             print "#{ (snr ? snr[1] : "-").rjust(10)} dB "
@@ -172,34 +172,3 @@ end
 
 exit
 
-
-#!/usr/bin/env ruby
-
-require 'rubygems'
-require 'snmp'
-require 'yaml'
-
-class Integer
-    def byte_to_Mbit
-        return (self * 8 / 1024 / 1024) 
-    end
-end
-
-
-
-begin
-    SNMP::Manager.open(:Host => h_opt , :Community => c_opt , :Timeout => 1 , :Retries => 600) do |manager| 
-
-        while 1
-
-
-        end
-    end
-rescue SNMP::RequestTimeout
-
-    print "\e[1G" # an den Anfang der zeile springen um in die erste Spalte zu kommen
-    100.times {print "\e[B"} # ans ende vom Terminal springen
-    puts "Timeout for 600s"
-    exit
-
-end
