@@ -7,6 +7,17 @@ require 'rubygems'
 require 'optparse'
 
 
+
+class Array
+    def include_reg? x
+        self.each do |y|
+            return true if y =~ x
+        end
+        return false
+    end
+end
+
+
 $expect_verbose = false
 
 
@@ -27,12 +38,16 @@ def get_console_cols_rows
 
 end
 
-
-interfaces = []
+ips = {}
 
 optparse = OptionParser.new do|opts|
-    opts.on( '-i', '--interface IP_interface', " Address" ) do|f|
-        interfaces << f
+    opts.on( '-i', '--interface IP_interface', " Address" ) do |f|
+
+        ip = f.split('_')[0]
+        filter = Regexp.new(f.split('_')[1])
+        ips[ip] = [] if not ips[ip]
+        ips[ip] << filter
+
     end
     opts.on( '-h', '--help', 'Display this screen' ) do
         puts opts
@@ -43,7 +58,7 @@ end
 
 optparse.parse!
 
-if interfaces.empty? 
+if ips.empty? 
     raise "no interfaces given"
 end
 
@@ -69,9 +84,7 @@ puts "\e[39m\e[2J" #  set default colour and clear screen
 print "\e[3;1H\n" # jump to position 1:1
 
 connections = []
-interfaces.each do |interface|
-    ip = interface.split('_')[0]
-    filter = Regexp.new(interface.split('_')[1])
+ips.each_pair do |ip, filters|
 
     reader, writer, pid = PTY.spawn("ssh #{user}@#{ip} -o ConnectTimeout=5 -o StrictHostKeyChecking=no")
 
@@ -79,17 +92,9 @@ interfaces.each do |interface|
         writer.puts(pass)
     }
     reader.expect(/\n#{user}@.*> /){|a|
-        writer.puts("show interface")
-    }
-    matches = []
-
-    reader.expect(/\n#{user}@.*> /){|a|
-
-        matches = a[0].scan(/\r\r\n\d\/\d\/[cn]\d+ /).map{|x| x.strip}
-        matches = matches.delete_if{|x| not filter.match(x) }
         writer.puts("")
     }
-    connections << [ reader, writer, pid, matches, ip ]
+    connections << [ reader, writer, pid, ip , filters ]
 end
 
 
@@ -107,11 +112,26 @@ loop do
         reader = connection[0]
         writer = connection[1]
         pid = connection[2]
-        interfaces = connection[3]
-        ip = connection[4]
+        ip = connection[3]
+        filters = connection[4]
+
+        reader.expect(/\n#{user}@.*> /){|a|
+            writer.puts("show interface")
+        }
+
+        matches = []
+
+        reader.expect(/\n#{user}@.*> /){|a|
+
+            matches = a[0].scan(/\r\r\n\d\/\d\/[cn]\d+ /).map{|x| x.strip}
+            matches.delete_if do |x|
+                not filters.include_reg?(x)
+            end
+            writer.puts("")
+        }
 
 
-        interfaces.each do | interface |
+        matches.each do | interface |
 
             out_level = nil
             in_level = nil
