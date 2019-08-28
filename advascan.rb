@@ -80,11 +80,11 @@ trap('INT') do
     exit
 end
 
-puts "\e[39m\e[2J" #  set default colour and clear screen
-print "\e[3;1H\n" # jump to position 1:1
 
 connections = []
 ips.each_pair do |ip, filters|
+    puts
+    puts " connecting to #{ip} "
 
     reader, writer, pid = PTY.spawn("ssh #{user}@#{ip} -o ConnectTimeout=5 -o StrictHostKeyChecking=no")
 
@@ -97,11 +97,13 @@ ips.each_pair do |ip, filters|
     connections << [ reader, writer, pid, ip , filters ]
 end
 
+puts "\e[39m\e[2J" #  set default colour and clear screen
+print "\e[3;1H\n" # jump to position 1:1
 
 loop do
 
     print "\e[1;1H\e[K\n" #jump to 1:1 and clear first line
-    print " IP                     Interface            Channel         Type              IN            OUT            SNR            CD\e[K\n" 
+    print " IP                     Interface            Label                Channel         Type              IN            OUT            SNR            CD\e[K\n" 
 
     cols,rows = get_console_cols_rows
     #printheader
@@ -138,6 +140,7 @@ loop do
             snr = nil
             cd = nil
             channel = "0"
+            label = nil
 
             type = ""
             reader.expect(/\n#{user}@.*> /){|a|
@@ -146,6 +149,11 @@ loop do
             reader.expect(/\n#{user}@.*> /){|a|
 
                 channel = a[0].match(/frequency: (\d+\.?\d+) THz/)
+                writer.puts("show interface #{interface} detail")
+            }
+            reader.expect(/\n#{user}@.*> /){|a|
+
+                label = a[0].match(/user-label: (.*)\r\r\n/)
                 writer.puts("show interface #{interface} opt-phy pm current")
             }
             reader.expect(/\n#{user}@.*> /){|a|
@@ -163,20 +171,25 @@ loop do
             reader.expect(/\n#{user}@.*> /){|a|
                 snr = a[0].match(/signal-to-noise-ratio .* (-?\d+\.?\d?) dB/)
                 cd = a[0].match(/chromatic-dispersion-compensation .* (-?\d+\.?\d?) ps\/nm/)
-                type = "ot100"
                 if snr == nil && cd == nil
                     writer.puts("show interface #{interface}/ot200 och pm current")
                     reader.expect(/\n#{user}@.*> /){|a|
-                        type = "ot200"
                         snr = a[0].match(/signal-to-noise-ratio .* (-?\d+\.?\d?) dB/)
                         cd = a[0].match(/chromatic-dispersion-compensation .* (-?\d+\.?\d?) ps\/nm/)
                     }
+                    if snr != nil && cd != nil
+                        type = "ot200"
+                    end
+                else
+                    type = "ot100"
                 end
+
                 writer.puts("")
             }
 
             print " #{ ip.ljust(22)} "
             print "#{ interface.ljust(20)} "
+            print "#{ (label ? label[1][0..19] : "-").ljust(20)} "
             print "#{ (channel ? channel[1] : "-").ljust(15)} "
             print "#{ type.ljust(10)} "
             print "#{ (in_level ? in_level[1] : "-").rjust(10)} dBm "
@@ -187,8 +200,8 @@ loop do
 
         end
     end
+    100.times {print "\e[2K\e[B"} # clear rest of screen if not paged
 
 end
 
 exit
-
